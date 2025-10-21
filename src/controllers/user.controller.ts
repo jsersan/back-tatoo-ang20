@@ -9,14 +9,18 @@ import db from '../models';
 import authConfig from '../config/auth';
 import { IUser, IUserResponse, ILoginRequest } from '../interfaces/user.interface';
 
+// Extender el tipo Request para incluir userId
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: number;
+    }
+  }
+}
+
 // Referencia al modelo User
 const User = db.User;
 
-/**
- * Generador de token JWT
- * @param userId ID del usuario para incluir en el payload
- * @returns Token JWT firmado
- */
 /**
  * Generador de token JWT
  * @param userId ID del usuario para incluir en el payload
@@ -107,39 +111,80 @@ const userController = {
   },
   
   /**
-   * Inicia sesión para un usuario
+   * Inicia sesión para un usuario - Maneja contraseñas en texto plano y hasheadas
    * POST /api/users/login
    */
   login: async (req: Request, res: Response): Promise<Response> => {
     try {
+      console.log('=== INICIO LOGIN DEBUG ===');
+      console.log('Body recibido:', req.body);
+      
       const { username, password }: ILoginRequest = req.body;
       
+      console.log('Username:', username);
+      console.log('Password recibido (longitud):', password ? password.length : 'no hay password');
+      
       // Buscar el usuario por nombre de usuario
+      console.log('Buscando usuario en base de datos...');
       const user = await User.findOne({
         where: { username }
       });
       
+      console.log('Usuario encontrado:', user ? 'SÍ' : 'NO');
+      
       // Verificar si el usuario existe
       if (!user) {
+        console.log('❌ Usuario no encontrado');
         return res.status(404).json({
           message: 'Usuario no encontrado'
         });
       }
       
-      // Verificar la contraseña
-      const passwordIsValid = bcrypt.compareSync(
-        password,
-        user.get('password') as string
-      );
+      // Obtener la contraseña almacenada
+      const storedPassword = user.get('password') as string;
+      console.log('Password almacenado existe:', !!storedPassword);
+      console.log('Password almacenado (primeros 10 chars):', storedPassword ? storedPassword.substring(0, 10) : 'N/A');
+      
+      let passwordIsValid = false;
+      
+      // 🔧 VERIFICACIÓN INTELIGENTE DE CONTRASEÑA
+      if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
+        // La contraseña está hasheada con bcrypt
+        console.log('🔐 Contraseña detectada como BCRYPT - usando compareSync');
+        passwordIsValid = bcrypt.compareSync(password, storedPassword);
+      } else {
+        // La contraseña está en texto plano - comparación directa
+        console.log('📝 Contraseña detectada como TEXTO PLANO - comparación directa');
+        passwordIsValid = (password === storedPassword);
+        
+        // 🚨 HASHEAR AUTOMÁTICAMENTE LA CONTRASEÑA PARA FUTURAS OCASIONES
+        if (passwordIsValid) {
+          console.log('🔄 Actualizando contraseña a formato bcrypt...');
+          const hashedPassword = bcrypt.hashSync(password, 10);
+          
+          try {
+            await user.update({ password: hashedPassword });
+            console.log('✅ Contraseña actualizada a bcrypt exitosamente');
+          } catch (updateError) {
+            console.warn('⚠️ No se pudo actualizar la contraseña a bcrypt:', updateError);
+            // No fallar el login por esto, solo registrar el warning
+          }
+        }
+      }
+      
+      console.log('Contraseña válida:', passwordIsValid);
       
       if (!passwordIsValid) {
+        console.log('❌ Contraseña incorrecta');
         return res.status(401).json({
           message: 'Contraseña incorrecta'
         });
       }
       
       // Generar token JWT
+      console.log('Generando token...');
       const token = generateToken(user.get('id') as number);
+      console.log('Token generado:', !!token);
       
       // Preparar respuesta con datos de usuario y token
       const userResponse: IUserResponse = {
@@ -147,9 +192,12 @@ const userController = {
         token
       };
       
+      console.log('✅ Login exitoso');
+      console.log('=== FIN LOGIN DEBUG ===');
+      
       return res.status(200).json(userResponse);
     } catch (err) {
-      console.error('Error en login:', err);
+      console.error('💥 Error en login:', err);
       if (err instanceof Error) {
         return res.status(500).json({ message: err.message });
       }

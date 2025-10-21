@@ -1,67 +1,71 @@
-/* Middleware de Autenticación
- * Verifica tokens JWT para proteger rutas */
-
+// middleware/auth.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Secret } from 'jsonwebtoken';
 import authConfig from '../config/auth';
 
-// Extender la interfaz Request para incluir userId
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: number;
-    }
-  }
+interface TokenPayload {
+  id: number;
+  iat: number;
+  exp: number;
 }
 
-/* Middleware para verificar tokens JWT
- * Añade el userId a la solicitud si el token es válido */
-
-export const verifyToken = (req: Request, res: Response, next: NextFunction): void | Response => {
-  // Obtener el header de autorización
-  const authHeader = req.headers.authorization;
-  
-  // Verificar que existe el header y tiene el formato correcto
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ 
-      message: 'Token no proporcionado',
-      details: 'Se requiere un token JWT en el header Authorization con formato Bearer'
-    });
-  }
-  
-  // Extraer el token
-  const token = authHeader.split(' ')[1];
-  
+export const verifyToken = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    // Verificar y decodificar el token
-    const decoded = jwt.verify(token, authConfig.secret as Secret) as { id: number };
+    // Obtener el token del header Authorization
+    const authHeader = req.headers.authorization;
     
-    // Añadir el ID del usuario a la solicitud para su uso en controladores
+    if (!authHeader) {
+      res.status(401).json({ message: 'Token no proporcionado' });
+      return;
+    }
+    
+    // Extraer el token (formato: "Bearer TOKEN")
+    const token = authHeader.split(' ')[1];
+    
+    if (!token) {
+      res.status(401).json({ message: 'Token mal formateado' });
+      return;
+    }
+    
+    // Verificar el token
+    const decoded = jwt.verify(token, authConfig.secret) as TokenPayload;
+    
+    // Añadir el ID del usuario al request
     req.userId = decoded.id;
     
-    // Continuar con la siguiente función en la cadena
     next();
-  } catch (err) {
-    // Manejar error según su tipo
-    if (err instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ 
-        message: 'Token expirado',
-        details: 'La sesión ha expirado, por favor inicie sesión nuevamente'
-      });
-    }
-    
-    if (err instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ 
-        message: 'Token inválido',
-        details: 'El token proporcionado no es válido' 
-      });
-    }
-    
-    // Error genérico
-    return res.status(401).json({ 
-      message: 'Error de autenticación',
-      details: err instanceof Error ? err.message : 'Error desconocido'
-    });
+  } catch (error) {
+    console.error('Error en middleware de autenticación:', error);
+    res.status(401).json({ message: 'Token inválido' });
   }
 };
+
+// Middleware opcional para rutas que pueden requerir autenticación
+export const optionalAuthMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      next();
+      return;
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    if (!token) {
+      next();
+      return;
+    }
+    
+    const decoded = jwt.verify(token, authConfig.secret) as TokenPayload;
+    req.userId = decoded.id;
+    
+    next();
+  } catch (error) {
+    // En caso de error, simplemente continuar sin establecer userId
+    next();
+  }
+};
+
+// Alias para compatibilidad
+export const authMiddleware = verifyToken;
