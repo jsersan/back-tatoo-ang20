@@ -1,372 +1,217 @@
-// src/controllers/order.controller.ts - Controlador completo y mejorado
+import { Request, Response } from 'express';
+import { OrderService } from '../services/order.service';
+import { PdfService } from '../services/pdf.service';
+import { EmailService } from '../services/email.service';
 
-import { Request, Response } from 'express'
-import db from '../models'
-import { IOrder, IOrderLine } from '../interfaces/order.interface'
-import { Transaction } from 'sequelize'
+const orderService = new OrderService();
+const pdfService = new PdfService();
+const emailService = new EmailService();
 
-// Referencias a los modelos necesarios
-const Order = db.Order
-const OrderLine = db.OrderLine
-const User = db.User
-const Product = db.Product
+// Define tu interfaz real de líneas de pedido (ajusta campos según tu modelo real)
+interface LineaPedido {
+  cant: number;
+  precio: number;
+  // otros campos: idprod, nombre, etc.
+}
 
-/**
- * Controlador de pedidos mejorado y completo
- */
-const orderController = {
-  /**
-   * ✅ Obtiene pedidos de un usuario específico
-   * GET /api/pedidos/user/:userId
-   */
-  findByUser: async (req: Request, res: Response): Promise<Response> => {
+export class OrderController {
+
+  static async createOrder(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.userId)
-      
-      console.log('🚀 Buscando pedidos para usuario:', userId);
-      console.log('🔑 Usuario autenticado:', req.userId);
+      const userId = req.body.userId;
+      const lineasPedido: LineaPedido[] = req.body.lineas || [];
 
-      // ✅ Verificar que el parámetro es válido
-      if (isNaN(userId) || userId <= 0) {
-        return res.status(400).json({ 
-          message: 'ID de usuario no válido' 
-        });
-      }
-
-      // ✅ Verificar que el usuario autenticado está accediendo a sus propios pedidos o es admin
-      if (req.userId !== userId && !(await isAdmin(req.userId))) {
-        console.warn(`⚠️ Usuario ${req.userId} intentó acceder a pedidos de usuario ${userId}`);
-        return res.status(403).json({ 
-          message: 'No autorizado para ver estos pedidos' 
-        })
-      }
-
-      // ✅ Verificar si el usuario existe
-      const user = await User.findByPk(userId)
-      if (!user) {
-        return res.status(404).json({ 
-          message: 'Usuario no encontrado' 
-        })
-      }
-
-      // ✅ Obtener pedidos con sus líneas y información de productos
-      const orders = await Order.findAll({
-        where: { iduser: userId },
-        include: [
-          {
-            model: OrderLine,
-            as: 'lineas',
-            include: [
-              {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'nombre', 'precio', 'imagen', 'carpetaimg'],
-                required: false // LEFT JOIN para que no falle si falta el producto
-              }
-            ]
-          }
-        ],
-        order: [['fecha', 'DESC']] // Pedidos más recientes primero
-      })
-
-      console.log(`✅ Encontrados ${orders.length} pedidos para usuario ${userId}`);
-
-      return res.status(200).json(orders)
-    } catch (err) {
-      console.error('❌ Error al obtener pedidos del usuario:', err)
-      if (err instanceof Error) {
-        return res.status(500).json({ message: err.message })
-      }
-      return res.status(500).json({ message: 'Error al obtener pedidos' })
-    }
-  },
-
-  /**
-   * ✅ Obtiene un pedido específico con todos sus detalles
-   * GET /api/pedidos/:id
-   */
-  findOne: async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const id = parseInt(req.params.id)
-      
-      console.log('🚀 Buscando pedido con ID:', id);
-      console.log('🔑 Usuario autenticado:', req.userId);
-
-      // ✅ Verificar que el parámetro es válido
-      if (isNaN(id) || id <= 0) {
-        return res.status(400).json({ 
-          message: 'ID de pedido no válido' 
-        });
-      }
-
-      // ✅ Buscar pedido por ID con todas las relaciones
-      const order = await Order.findByPk(id, {
-        include: [
-          {
-            model: OrderLine,
-            as: 'lineas',
-            include: [
-              {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'nombre', 'precio', 'imagen', 'carpetaimg'],
-                required: false
-              }
-            ]
-          },
-          {
-            model: User,
-            as: 'user',
-            attributes: ['id', 'username', 'nombre', 'email']
-          }
-        ]
-      })
-
-      if (!order) {
-        return res.status(404).json({ 
-          message: 'Pedido no encontrado' 
-        })
-      }
-
-      // ✅ Verificar que el usuario autenticado es el propietario del pedido o un administrador
-      if (order.get('iduser') !== req.userId && !(await isAdmin(req.userId))) {
-        console.warn(`⚠️ Usuario ${req.userId} intentó acceder al pedido ${id} de otro usuario`);
-        return res.status(403).json({ 
-          message: 'No autorizado para ver este pedido' 
-        })
-      }
-
-      console.log(`✅ Pedido ${id} encontrado y autorizado`);
-
-      return res.status(200).json(order)
-    } catch (err) {
-      console.error('❌ Error al obtener pedido:', err)
-      if (err instanceof Error) {
-        return res.status(500).json({ message: err.message })
-      }
-      return res.status(500).json({ message: 'Error al obtener el pedido' })
-    }
-  },
-
-  /**
-   * ✅ Crea un nuevo pedido (MÉTODO PRINCIPAL MEJORADO)
-   * POST /api/pedidos
-   */
-  create: async (req: Request, res: Response): Promise<Response> => {
-    try {
-      console.log('🚀 Creando nuevo pedido...');
-      console.log('📦 Datos recibidos:', req.body);
-      console.log('🔑 Usuario autenticado:', req.userId);
-
-      // ✅ VERIFICACIÓN 1: Usuario autenticado
-      const userId = req.userId;
       if (!userId) {
-        console.error('❌ No hay usuario autenticado');
-        return res.status(401).json({
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // ✅ VERIFICACIÓN 2: Datos del pedido
-      const orderData = req.body;
-      
-      // Validar campos requeridos
-      if (!orderData.total || orderData.total <= 0) {
         return res.status(400).json({
-          message: 'El total del pedido debe ser mayor a 0'
+          success: false,
+          message: 'Usuario no especificado'
         });
       }
 
-      if (!orderData.lineas || !Array.isArray(orderData.lineas) || orderData.lineas.length === 0) {
-        return res.status(400).json({ 
-          message: 'El pedido debe contener al menos un producto' 
+      if (!lineasPedido || lineasPedido.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'El pedido debe contener al menos un producto'
         });
       }
 
-      // ✅ VERIFICACIÓN 3: Validar líneas de pedido
-      for (let i = 0; i < orderData.lineas.length; i++) {
-        const linea = orderData.lineas[i];
-        
-        if (!linea.idprod || linea.idprod <= 0) {
-          return res.status(400).json({
-            message: `Línea ${i + 1}: ID de producto no válido`
-          });
-        }
-        
-        if (!linea.cant || linea.cant <= 0) {
-          return res.status(400).json({
-            message: `Línea ${i + 1}: Cantidad debe ser mayor a 0`
-          });
-        }
-        
-        if (!linea.color) {
-          return res.status(400).json({
-            message: `Línea ${i + 1}: Color es requerido`
-          });
-        }
+      console.log('📦 Creando pedido para usuario:', userId);
+      console.log('📋 Líneas del pedido:', lineasPedido);
 
-        // ✅ Verificar que el producto existe
-        const product = await Product.findByPk(linea.idprod);
-        if (!product) {
-          return res.status(400).json({
-            message: `Línea ${i + 1}: Producto con ID ${linea.idprod} no encontrado`
-          });
-        }
-      }
-
-      // ✅ PROCESAMIENTO: Crear pedido con transacción
-      const result = await db.sequelize.transaction(async (t: Transaction) => {
-        console.log('💾 Iniciando transacción de base de datos...');
-
-        // ✅ 1. Crear el pedido principal
-        const order = await Order.create(
-          {
-            iduser: userId, // ✅ Usar userId del token JWT
-            fecha: orderData.fecha || new Date().toISOString().split('T')[0],
-            total: parseFloat(orderData.total)
-          },
-          { transaction: t }
-        )
-
-        const orderId = order.get('id') as number;
-        console.log(`✅ Pedido creado con ID: ${orderId}`);
-
-        // ✅ 2. Crear líneas de pedido
-        const orderLines: IOrderLine[] = orderData.lineas.map((line: any) => ({
-          idpedido: orderId,
-          idprod: line.idprod,
-          color: line.color || 'Estándar',
-          cant: line.cant, // ✅ El backend usa 'cant'
-          nombre: line.nombre || ''
-        }));
-
-        await OrderLine.bulkCreate(orderLines, { transaction: t });
-        console.log(`✅ Creadas ${orderLines.length} líneas de pedido`);
-
-        // ✅ 3. Obtener el pedido completo con sus líneas
-        const completeOrder = await Order.findByPk(orderId, {
-          include: [
-            {
-              model: OrderLine,
-              as: 'lineas'
-            }
-          ],
-          transaction: t
-        });
-
-        return completeOrder;
+      // 1. Crear el pedido en la base de datos
+      const pedido = await orderService.createOrder({
+        iduser: userId,
+        fecha: new Date().toISOString().split('T')[0],
+        total: lineasPedido.reduce(
+          (acc: number, linea: LineaPedido) => acc + (linea.cant * linea.precio), 0)
       });
 
-      console.log('✅ Pedido creado exitosamente:', result?.get('id'));
+      console.log('✅ Pedido creado con ID:', pedido.id);
 
-      return res.status(201).json(result)
-    } catch (err) {
-      console.error('❌ Error al crear pedido:', err)
-      
-      // ✅ Manejo de errores específicos
-      if (err instanceof Error) {
-        // Error de validación de Sequelize
-        if (err.name === 'SequelizeValidationError') {
-          return res.status(400).json({
-            message: 'Error de validación en los datos',
-            details: err.message
-          });
-        }
-        
-        // Error de clave foránea (producto no existe, etc.)
-        if (err.name === 'SequelizeForeignKeyConstraintError') {
-          return res.status(400).json({
-            message: 'Error de referencia: producto o usuario no válido',
-            details: err.message
-          });
-        }
-        
-        return res.status(500).json({ 
-          message: 'Error al crear el pedido',
-          details: err.message 
-        });
+      // 2. Obtener los datos del usuario
+      const usuario = await orderService.getUserData(userId);
+
+      if (!usuario) {
+        console.warn('⚠️ No se encontró información del usuario');
       }
-      
-      return res.status(500).json({ 
-        message: 'Error al crear el pedido' 
+
+      // 3. Generar el PDF del albarán
+      const pdfBuffer = await pdfService.generarAlbaranBuffer(pedido, lineasPedido, usuario);
+
+      // 4. Enviar el albarán por email
+      let emailEnviado = false;
+      if (usuario && usuario.email) {
+        try {
+          emailEnviado = await emailService.enviarAlbaran(pedido, lineasPedido, usuario, pdfBuffer);
+          console.log('✅ Albarán enviado exitosamente por email');
+        } catch (emailError) {
+          console.error('❌ Error al enviar email:', emailError);
+        }
+      } else {
+        console.warn('⚠️ No se pudo enviar email: usuario sin email configurado');
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: 'Pedido creado exitosamente',
+        data: { pedido, emailEnviado }
+      });
+
+    } catch (error: any) {
+      console.error('❌ Error al crear pedido:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al crear el pedido',
+        error: error.message
       });
     }
-  },
+  }
 
-  /**
-   * ✅ Obtiene todos los pedidos (solo admin)
-   * GET /api/pedidos
-   */
-  findAll: async (req: Request, res: Response): Promise<Response> => {
+  static async getUserOrders(req: Request, res: Response) {
     try {
-      console.log('🚀 Obteniendo todos los pedidos (admin)');
-      console.log('🔑 Usuario autenticado:', req.userId);
-
-      // ✅ Verificar permisos de admin
-      if (!(await isAdmin(req.userId))) {
-        return res.status(403).json({
-          message: 'Se requieren permisos de administrador'
+      const userId = req.params.userId || req.body.userId;
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Usuario no especificado'
         });
       }
 
-      // ✅ Parámetros de paginación
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
-      const offset = (page - 1) * limit;
-
-      // ✅ Obtener pedidos con paginación
-      const { count, rows: orders } = await Order.findAndCountAll({
-        include: [
-          {
-            model: OrderLine,
-            as: 'lineas'
-          },
-          {
-            model: User,
-            as: 'user',
-            attributes: ['id', 'username', 'nombre', 'email']
-          }
-        ],
-        order: [['fecha', 'DESC']],
-        limit,
-        offset
+      console.log('📦 Obteniendo pedidos del usuario:', userId);
+      const pedidos = await orderService.getOrdersByUser(parseInt(userId));
+      return res.status(200).json({
+        success: true,
+        data: pedidos
       });
+    } catch (error: any) {
+      console.error('❌ Error al obtener pedidos:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al obtener los pedidos',
+        error: error.message
+      });
+    }
+  }
+
+  static async descargarAlbaran(req: Request, res: Response) {
+    try {
+      const pedidoId = parseInt(req.params.pedidoId);
+      const userId = req.body.userId || req.query.userId;
+      if (!pedidoId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de pedido no especificado'
+        });
+      }
+
+      console.log('📥 Descargando albarán para pedido:', pedidoId);
+      // Obtener datos del pedido
+      const pedido = await orderService.getOrderById(pedidoId);
+      if (!pedido) {
+        return res.status(404).json({
+          success: false,
+          message: 'Pedido no encontrado'
+        });
+      }
+
+      // Verificar que el pedido pertenece al usuario (opcional)
+      if (userId && pedido.iduser !== parseInt(userId as string)) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para acceder a este pedido'
+        });
+      }
+
+      // Obtener líneas del pedido y datos de usuario
+      const lineas = await orderService.getOrderLines(pedidoId);
+      const usuario = await orderService.getUserData(pedido.iduser);
+
+      // Generar PDF
+      const pdfBuffer = await pdfService.generarAlbaranBuffer(pedido, lineas, usuario);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Albaran_${pedidoId}.pdf"`);
+      res.send(pdfBuffer);
+
+    } catch (error: any) {
+      console.error('❌ Error al descargar albarán:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al generar el albarán',
+        error: error.message
+      });
+    }
+  }
+
+  static async reenviarAlbaran(req: Request, res: Response) {
+    try {
+      const pedidoId = parseInt(req.params.pedidoId);
+      if (!pedidoId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de pedido no especificado'
+        });
+      }
+
+      console.log('📧 Reenviando albarán para pedido:', pedidoId);
+      const pedido = await orderService.getOrderById(pedidoId);
+      if (!pedido) {
+        return res.status(404).json({
+          success: false,
+          message: 'Pedido no encontrado'
+        });
+      }
+
+      const lineas = await orderService.getOrderLines(pedidoId);
+      const usuario = await orderService.getUserData(pedido.iduser);
+
+      if (!usuario || !usuario.email) {
+        return res.status(400).json({
+          success: false,
+          message: 'Usuario sin email configurado'
+        });
+      }
+
+      // Generar PDF
+      const pdfBuffer = await pdfService.generarAlbaranBuffer(pedido, lineas, usuario);
+
+      // Enviar por email
+      await emailService.enviarAlbaran(pedido, lineas, usuario, pdfBuffer);
 
       return res.status(200).json({
-        orders,
-        pagination: {
-          total: count,
-          page,
-          pages: Math.ceil(count / limit),
-          limit
-        }
+        success: true,
+        message: 'Albarán enviado exitosamente'
       });
-    } catch (err) {
-      console.error('❌ Error al obtener todos los pedidos:', err);
-      if (err instanceof Error) {
-        return res.status(500).json({ message: err.message });
-      }
-      return res.status(500).json({ message: 'Error al obtener pedidos' });
+    } catch (error: any) {
+      console.error('❌ Error al reenviar albarán:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al enviar el albarán',
+        error: error.message
+      });
     }
   }
 }
 
-/**
- * ✅ Función auxiliar para verificar si un usuario es administrador
- */
-const isAdmin = async (userId: number | undefined): Promise<boolean> => {
-  if (!userId) return false
+export default OrderController;
 
-  try {
-    const user = await User.findByPk(userId)
-    const isAdminUser = user && (user.get('username') === 'admin' || user.get('role') === 'admin');
-    
-    console.log(`🔐 Verificación de admin para usuario ${userId}:`, isAdminUser);
-    return isAdminUser;
-  } catch (error) {
-    console.error('❌ Error al verificar permisos de admin:', error);
-    return false;
-  }
-}
-
-export default orderController

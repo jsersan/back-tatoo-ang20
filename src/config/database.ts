@@ -1,31 +1,22 @@
-/**
- * Configuración de la base de datos
- * Define los parámetros de conexión a la base de datos MySQL/PostgreSQL
- */
-import { Dialect } from 'sequelize';
+import { Dialect, Sequelize } from 'sequelize';
 import dotenv from 'dotenv';
 
-// Cargar variables de entorno
 dotenv.config();
 
-/**
- * Interfaz que define la estructura de la configuración de base de datos
- */
 interface DbConfig {
-  host: string;       // Servidor de base de datos
-  user: string;       // Usuario de la base de datos
-  password: string;   // Contraseña del usuario
-  database: string;   // Nombre de la base de datos
-  dialect: Dialect;   // Tipo de base de datos (mysql, postgres, etc.)
+  host: string;
+  user: string;
+  password: string;
+  database: string;
+  dialect: Dialect;
   pool: {
-    max: number;      // Número máximo de conexiones en el pool
-    min: number;      // Número mínimo de conexiones en el pool
-    acquire: number;  // Tiempo máximo (ms) para adquirir una conexión
-    idle: number;     // Tiempo máximo (ms) que una conexión puede estar inactiva
+    max: number;
+    min: number;
+    acquire: number;
+    idle: number;
   };
 }
 
-// Configuración extraída de variables de entorno con valores por defecto
 const config: DbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -40,4 +31,17 @@ const config: DbConfig = {
   }
 };
 
+const sequelize = new Sequelize(
+  config.database,
+  config.user,
+  config.password,
+  {
+    host: config.host,
+    dialect: config.dialect,
+    pool: config.pool,
+    logging: false
+  }
+);
+
 export default config;
+export { sequelize };

@@ -1,5 +1,5 @@
 export interface IOrder {
-  id?: number;          // ID único (opcional para nuevos pedidos)
+  id?: number;           // ID único (opcional para nuevos pedidos)
   iduser: number;       // ID del usuario que realiza el pedido
   fecha: string;        // Fecha del pedido en formato YYYY-MM-DD
   total: number;        // Importe total del pedido
