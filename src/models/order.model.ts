@@ -1,87 +1,67 @@
 import { Model, DataTypes, Sequelize, ModelStatic } from 'sequelize';
 import { IOrder } from '../interfaces/order.interface';
 
-export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): ModelStatic<Model<IOrder>> {
-  /**
-   * Clase Order que extiende el Model de Sequelize
-   * Implementa la interfaz IOrder para tipado fuerte
-   */
-  class Order extends Model<IOrder> implements IOrder {
-    // Propiedades del modelo
+export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): ModelStatic<Model> {
+
+  class Order extends Model implements IOrder {
     public id!: number;
     public iduser!: number;
     public fecha!: string;
     public total!: number;
-
-    // Timestamps automáticos de Sequelize
+    // Si usas timestamps automáticos, agrega aquí los atributos
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
-    /**
-     * Método estático para definir asociaciones con otros modelos
-     * @param models Objeto con todos los modelos disponibles
-     */
     public static associate(models: any) {
-      // Un pedido pertenece a un usuario
+      // Asociación con el usuario
       Order.belongsTo(models.User, {
         foreignKey: 'iduser',
         as: 'user'
       });
 
-      // Un pedido tiene muchas líneas de pedido
+      // Asociación con las líneas del pedido
       Order.hasMany(models.OrderLine, {
         foreignKey: 'idpedido',
         as: 'lineas',
-        onDelete: 'CASCADE' // Si se elimina el pedido, se eliminan sus líneas
+        onDelete: 'CASCADE'
       });
     }
   }
 
-  // Inicializar el modelo con sus atributos y opciones
-  Order.init(
-    {
-      // Definición de columnas
-      id: {
-        type: dataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true
-      },
-      iduser: {
-        type: dataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: 'users', // Referencia a la tabla de usuarios
-          key: 'id'
-        },
-        comment: 'ID del usuario que realizó el pedido'
-      },
-      fecha: {
-        type: dataTypes.DATEONLY, // Solo fecha, sin hora
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-        comment: 'Fecha en que se realizó el pedido'
-      },
-      total: {
-        type: dataTypes.DECIMAL(10, 2),
-        allowNull: false,
-        validate: {
-          min: 0 // El total no puede ser negativo
-        },
-        comment: 'Importe total del pedido'
-      }
+  Order.init({
+    id: {
+      type: dataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
     },
-    {
-      sequelize,
-      modelName: 'Order',
-      tableName: 'pedido', // Cambiado a 'pedido' para usar la tabla existente,
-      timestamps: false,
-      // Índices para mejorar el rendimiento de las consultas
-      indexes: [
-        { fields: ['iduser'] }, // Índice para búsquedas por usuario
-        { fields: ['fecha'] }   // Índice para búsquedas por fecha
-      ]
+    iduser: {
+      type: dataTypes.INTEGER,
+      allowNull: false,
+      references: { model: 'users', key: 'id' },
+      comment: 'ID del usuario que realizó el pedido'
+    },
+    fecha: {
+      type: dataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha en que se realizó el pedido'
+    },
+    total: {
+      type: dataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      validate: { min: 0 },
+      comment: 'Importe total del pedido'
     }
-  );
+  }, {
+    sequelize,
+    modelName: 'Order',
+    tableName: 'pedido',
+    timestamps: false,
+    indexes: [
+      { fields: ['iduser'] },
+      { fields: ['fecha'] }
+    ]
+  });
 
   return Order;
 }

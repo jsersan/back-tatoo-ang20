@@ -1,39 +1,48 @@
-import { IOrder } from '../interfaces/order.interface';
-import OrderModelFactory from '../models/order.model';
-import UserModelFactory from '../models/user.model';
-import OrderLineModelFactory from '../models/order-line.model';
-import { sequelize } from '../config/database';
+// backend/services/order.service.ts
 
-const OrderModel = OrderModelFactory(sequelize, require('sequelize').DataTypes);
-const UserModel = UserModelFactory(sequelize, require('sequelize').DataTypes);
-const OrderLineModel = OrderLineModelFactory(sequelize, require('sequelize').DataTypes);
+import db from '../models';
+import { IOrder } from '../interfaces/order.interface';
 
 export class OrderService {
-  async getOrdersByUser(userId: number): Promise<IOrder[]> {
-    const orders = await OrderModel.findAll({ where: { iduser: userId } });
-    return orders.map(o => o.get({ plain: true }) as IOrder);
+
+  // Crear pedido con líneas incluidas (CRÍTICO)
+  async createOrder(orderData: any): Promise<IOrder> {
+    const newOrder = await db.Order.create(orderData, {
+      include: [{ model: db.OrderLine, as: 'lineas' }]
+    });
+    return newOrder.get({ plain: true }) as IOrder;
   }
 
-  async getOrderById(orderId: number): Promise<IOrder | null> {
-    const order = await OrderModel.findByPk(orderId);
+  // Consultar pedidos de usuario, incluyendo líneas
+  async getOrdersByUserWithLines(userId: number): Promise<IOrder[]> {
+    const orders = await db.Order.findAll({
+      where: { iduser: userId },
+      include: [{ model: db.OrderLine, as: 'lineas' }]
+    });
+    return orders.map((o: any) => o.get({ plain: true }) as IOrder);
+  }
+
+  // Consultar por ID incluyendo líneas
+  async getOrderByIdWithLines(orderId: number): Promise<IOrder | null> {
+    const order = await db.Order.findByPk(orderId, {
+      include: [{ model: db.OrderLine, as: 'lineas' }]
+    });
     return order ? (order.get({ plain: true }) as IOrder) : null;
   }
 
-  // La clave está aquí: acepta tipo Omit<IOrder, 'id'>
-  async createOrder(orderData: Omit<IOrder, 'id'>): Promise<IOrder> {
-    const order = await OrderModel.create(orderData);
-    return order.get({ plain: true }) as IOrder;
+  // Consultar líneas específicas separadas
+  async getOrderLines(orderId: number): Promise<any[]> {
+    const lines = await db.OrderLine.findAll({ where: { idpedido: orderId } });
+    return lines.map((l: any) => l.get({ plain: true }));
   }
 
-  async getUserData(userId: number): Promise<any> {
-    const user = await UserModel.findByPk(userId);
+  // Consultar usuario (opcional, si tu código lo usa)
+  async getUserData(userId: number): Promise<any | null> {
+    const user = await db.User.findByPk(userId);
     return user ? user.get({ plain: true }) : null;
   }
-
-  async getOrderLines(orderId: number): Promise<any[]> {
-    const lines = await OrderLineModel.findAll({ where: { idpedido: orderId } });
-    return lines.map(l => l.get({ plain: true }));
-  }
 }
+
+
 
 
