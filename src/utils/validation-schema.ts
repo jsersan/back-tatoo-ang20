@@ -67,11 +67,8 @@ export const categorySchema = z.object({
   nombre: z.string()
     .min(2, { message: 'El nombre debe tener al menos 2 caracteres' })
     .max(100, { message: 'El nombre no puede exceder los 100 caracteres' }),
-  padre: z.union([
-    z.string().regex(/^\d+$/, { message: 'El ID del padre debe ser un número' }),
-    z.string().literal('sin'),
-    z.number().int()
-  ])
+  padre: z.string()
+    .regex(/^\d+$/, { message: 'El ID del padre debe ser un número' })
 });
 
 /**
@@ -84,8 +81,9 @@ export const productSchema = z.object({
   descripcion: z.string()
     .min(10, { message: 'La descripción debe tener al menos 10 caracteres' }),
   precio: z.union([
-    z.string().regex(/^\d+(\.\d{1,2})?$/, { message: 'El precio debe ser un número con máximo 2 decimales' })
-      .transform(val => parseFloat(val)),
+    z.string()
+      .regex(/^\d+(\.\d{1,2})?$/, { message: 'El precio debe ser un número con máximo 2 decimales' })
+      .transform((val) => parseFloat(val)),
     z.number().positive({ message: 'El precio debe ser mayor a 0' })
   ]),
   carpetaimg: z.string()
@@ -94,8 +92,9 @@ export const productSchema = z.object({
   imagen: z.string()
     .min(1, { message: 'Debe proporcionar el nombre de la imagen principal' }),
   categoria: z.union([
-    z.string().regex(/^\d+$/, { message: 'El ID de la categoría debe ser un número' })
-      .transform(val => parseInt(val)),
+    z.string()
+      .regex(/^\d+$/, { message: 'El ID de la categoría debe ser un número' })
+      .transform((val) => parseInt(val)),
     z.number().int({ message: 'El ID de la categoría debe ser un número entero' })
   ])
 });
@@ -147,10 +146,10 @@ export const validate = (schema: z.ZodSchema) => {
       const result = schema.parse(req.body);
       req.body = result; // Reemplazar con datos validados y transformados
       next();
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         // Formatear errores de Zod
-        const errors = error.errors.map(err => ({
+        const errors = error.issues.map(err => ({
           field: err.path.join('.'),
           message: err.message
         }));
@@ -166,5 +165,3 @@ export const validate = (schema: z.ZodSchema) => {
     }
   };
 };
-object({
-  password: z.
