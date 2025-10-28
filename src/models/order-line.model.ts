@@ -1,12 +1,15 @@
-import { Model, DataTypes, Sequelize, ModelStatic } from 'sequelize';
+import { Model, DataTypes, Sequelize, ModelStatic, Optional } from 'sequelize';
 import { IOrderLine } from '../interfaces/order.interface';
 
-export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): ModelStatic<Model<IOrderLine>> {
+// Definir qué campos son opcionales al crear
+interface OrderLineCreationAttributes extends Optional<IOrderLine, 'id'> {}
+
+export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): ModelStatic<Model<IOrderLine, OrderLineCreationAttributes>> {
   /**
    * Clase OrderLine que extiende el Model de Sequelize
    * Implementa la interfaz IOrderLine para tipado fuerte
    */
-  class OrderLine extends Model<IOrderLine> implements IOrderLine {
+  class OrderLine extends Model<IOrderLine, OrderLineCreationAttributes> implements IOrderLine {
     // Propiedades del modelo
     public id!: number;
     public idpedido!: number;
@@ -14,6 +17,7 @@ export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): Mode
     public color!: string;
     public cant!: number;
     public nombre?: string;
+    public precio!: number;
 
     // Timestamps automáticos de Sequelize
     public readonly createdAt!: Date;
@@ -41,61 +45,57 @@ export default function(sequelize: Sequelize, dataTypes: typeof DataTypes): Mode
   // Inicializar el modelo con sus atributos y opciones
   OrderLine.init(
     {
-      // Definición de columnas
-      id: {
-        type: dataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true
+      id: { 
+        type: dataTypes.INTEGER, 
+        primaryKey: true, 
+        autoIncrement: true 
       },
-      idpedido: {
-        type: dataTypes.INTEGER,
+      idpedido: { 
+        type: dataTypes.INTEGER, 
+        allowNull: false, 
+        references: { model: 'pedido', key: 'id' },
+        comment: 'ID del pedido al que pertenece esta línea' 
+      },
+      idprod: { 
+        type: dataTypes.INTEGER, 
+        allowNull: false, 
+        references: { model: 'producto', key: 'id' },
+        comment: 'ID del producto incluido en esta línea' 
+      },
+      color: { 
+        type: dataTypes.STRING, 
+        allowNull: false, 
+        comment: 'Color seleccionado para el producto' 
+      },
+      cant: { 
+        type: dataTypes.INTEGER, 
+        allowNull: false, 
+        validate: { min: 1 }, 
+        comment: 'Cantidad del producto' 
+      },
+      nombre: { 
+        type: dataTypes.STRING, 
+        allowNull: true, 
+        comment: 'Nombre del producto (histórico aunque se modifique el producto)' 
+      },
+      precio: { 
+        type: dataTypes.DECIMAL(10, 2), 
         allowNull: false,
-        references: {
-          model: 'orders', // Referencia a la tabla de pedidos
-          key: 'id'
-        },
-        comment: 'ID del pedido al que pertenece esta línea'
-      },
-      idprod: {
-        type: dataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: 'products', // Referencia a la tabla de productos
-          key: 'id'
-        },
-        comment: 'ID del producto incluido en esta línea'
-      },
-      color: {
-        type: dataTypes.STRING,
-        allowNull: false,
-        comment: 'Color seleccionado para el producto'
-      },
-      cant: {
-        type: dataTypes.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 1 // La cantidad mínima es 1
-        },
-        comment: 'Cantidad del producto'
-      },
-      nombre: {
-        type: dataTypes.STRING,
-        allowNull: true,
-        comment: 'Nombre del producto (para mantener histórico aunque se modifique el producto)'
+        defaultValue: 0,
+        comment: 'Precio unitario del producto en la línea'
       }
     },
     {
       sequelize,
       modelName: 'OrderLine',
-      tableName: 'lineapedido', // Cambiado a 'lineapedido' para usar la tabla existente,
+      tableName: 'lineapedido',
       timestamps: false,
-      // Índices para mejorar el rendimiento de las consultas
       indexes: [
-        { fields: ['idpedido'] }, // Índice para búsquedas por pedido
-        { fields: ['idprod'] }    // Índice para búsquedas por producto
+        { fields: ['idpedido'] }, 
+        { fields: ['idprod'] }
       ]
     }
-  );
-
+  );  
+  
   return OrderLine;
 }

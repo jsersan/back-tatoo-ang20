@@ -1,4 +1,8 @@
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno
+dotenv.config();
 
 /**
  * Configuración del transporter de nodemailer
@@ -20,6 +24,9 @@ const transporter = nodemailer.createTransport({
 transporter.verify((error, success) => {
   if (error) {
     console.error('❌ Error en la configuración de email:', error);
+    console.error('   Verifica las credenciales en el archivo .env');
+    console.error('   EMAIL_USER:', process.env.EMAIL_USER);
+    console.error('   EMAIL_PROVIDER:', process.env.EMAIL_PROVIDER);
   } else {
     console.log('✅ Servidor de email listo para enviar mensajes');
     console.log('📧 Email configurado:', process.env.EMAIL_USER);

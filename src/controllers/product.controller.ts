@@ -7,8 +7,59 @@ import path from 'path';
 import fs from 'fs';
 import db from '../models';
 import { IProduct } from '../interfaces/product.interface';
+import { Op } from 'sequelize';
 
 class ProductController {
+  /**
+   * 🔍 NUEVO: Buscar productos por término
+   * IMPORTANTE: Este método debe estar ANTES de show() para que /search no se confunda con /:id
+   */
+  async search(req: Request, res: Response): Promise<Response> {
+    try {
+      const { q } = req.query;
+      
+      if (!q || typeof q !== 'string' || q.trim() === '') {
+        return res.status(200).json([]);
+      }
+
+      const searchTerm = q.trim().toLowerCase();
+      console.log(`🔍 Buscando productos con término: "${searchTerm}"`);
+
+      // Buscar en nombre y descripción
+      const products = await db.Product.findAll({
+        where: {
+          [Op.or]: [
+            {
+              nombre: {
+                [Op.like]: `%${searchTerm}%`
+              }
+            },
+            {
+              descripcion: {
+                [Op.like]: `%${searchTerm}%`
+              }
+            }
+          ]
+        },
+        include: [{
+          model: db.Category,
+          as: 'categoryInfo'
+        }]
+      });
+
+      const productsJson = products.map((product: any) => product.toJSON());
+      console.log(`✅ Productos encontrados: ${productsJson.length}`);
+      
+      return res.status(200).json(productsJson);
+    } catch (error) {
+      console.error('❌ Error al buscar productos:', error);
+      return res.status(500).json({ 
+        message: 'Error al buscar productos', 
+        error: (error as Error).message 
+      });
+    }
+  }
+
   /**
    * Obtener todos los productos
    */
@@ -17,14 +68,11 @@ class ProductController {
       const products = await db.Product.findAll({
         include: [{
           model: db.Category,
-          as: 'categoryInfo'  // Cambiado de 'category' a 'categoryInfo'
+          as: 'categoryInfo'
         }]
       });
 
-      // Mapear los productos para incluir carpetaimg automáticamente
-      // Gracias al método toJSON() del modelo, ya se incluirá automáticamente
       const productsJson = products.map((product: any) => product.toJSON());
-
       console.log(`Total de productos encontrados: ${productsJson.length}`);
       
       return res.status(200).json(productsJson);
@@ -47,7 +95,7 @@ class ProductController {
       const product = await db.Product.findByPk(id, {
         include: [{
           model: db.Category,
-          as: 'categoryInfo'  // Cambiado de 'category' a 'categoryInfo'
+          as: 'categoryInfo'
         }]
       });
 
@@ -55,7 +103,6 @@ class ProductController {
         return res.status(404).json({ message: 'Producto no encontrado' });
       }
 
-      // toJSON() ya incluye carpetaimg automáticamente
       return res.status(200).json(product.toJSON());
     } catch (error) {
       console.error('Error al obtener producto:', error);
@@ -77,13 +124,11 @@ class ProductController {
         where: { categoria: categoryId },
         include: [{
           model: db.Category,
-          as: 'categoryInfo'  // Cambiado de 'category' a 'categoryInfo'
+          as: 'categoryInfo'
         }]
       });
 
-      // toJSON() ya incluye carpetaimg automáticamente
       const productsJson = products.map((product: any) => product.toJSON());
-
       console.log(`Productos encontrados para categoría ${categoryId}: ${productsJson.length}`);
       
       return res.status(200).json(productsJson);
@@ -181,7 +226,6 @@ class ProductController {
   /**
    * Obtener Colors disponibles del producto
    */
-  
   async getColors(req: Request, res: Response): Promise<Response> {
     try {
       const { id } = req.params;
@@ -191,7 +235,6 @@ class ProductController {
         return res.status(400).json({ message: 'ID de producto no válido' });
       }
       
-      // Primero intentamos obtener colores específicos para este producto de la tabla lineapedido
       const colors = await db.sequelize.query(
         'SELECT DISTINCT color FROM lineapedido WHERE idprod = :productId',
         {
@@ -200,7 +243,6 @@ class ProductController {
         }
       );
       
-      // Si no hay colores específicos para este producto, usamos todos los colores disponibles
       if (!colors || colors.length === 0) {
         const allColors = await db.sequelize.query(
           'SELECT id, nombre as color, codigo_color FROM product_colors',
@@ -221,7 +263,6 @@ class ProductController {
       });
     }
   }
-  
 
   /**
    * Obtener imagen del producto

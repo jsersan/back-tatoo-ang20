@@ -1,245 +1,276 @@
-import { Request, Response } from 'express'
+import { Request, Response } from 'express';
+import { OrderService } from '../services/order.service';
+import { PdfService } from '../services/pdf.service';
+import { EmailService } from '../services/email.service';
 
-import { OrderService } from '../services/order.service'
-import { PdfService } from '../services/pdf.service'
-import { EmailService } from '../services/email.service'
+const orderService = new OrderService();
+const pdfService = new PdfService();
+const emailService = new EmailService();
 
-const orderService = new OrderService()
-const pdfService = new PdfService()
-const emailService = new EmailService()
-
-// Define tu interfaz real de lÃ­neas de pedido (ajusta campos segÃºn tu modelo real)
 interface LineaPedido {
-  cant: number
-  precio: number
-  // otros campos: idprod, nombre, etc.
+  cant: number;
+  precio: number;
+  nombre?: string;
+  idprod: number;
+  color: string;
 }
 
 export class OrderController {
-  static async createOrder (req: Request, res: Response) {
+  /**
+   * ✅ MEJORADO: Crear pedido y enviar email automáticamente
+   */
+  static async createOrder(req: Request, res: Response) {
     try {
-      const userId = req.body.userId || req.body.iduser || req.body.usuario_id
-      const lineasPedido = req.body.lineas || []
+      const userId = req.body.userId || req.body.iduser || req.body.usuario_id;
+      const lineasPedido = req.body.lineas || [];
 
-      // âœ… AÃ‘ADIR LOG para debugging:
-      console.log('ðŸ“¦ Datos recibidos en backend:', {
-        body: req.body,
+      console.log('📦 Datos recibidos en backend:', {
         userId: userId,
-        hasUserId: !!userId
-      })
+        hasUserId: !!userId,
+        numLineas: lineasPedido.length
+      });
 
+      // Validaciones
       if (!userId) {
         return res.status(400).json({
           success: false,
           message: 'Usuario no especificado'
-        })
+        });
       }
 
       if (!lineasPedido || lineasPedido.length === 0) {
         return res.status(400).json({
           success: false,
           message: 'El pedido debe contener al menos un producto'
-        })
+        });
       }
 
-      console.log('ðŸ“¦ Creando pedido para usuario:', userId)
-      console.log('ðŸ“‹ LÃ­neas del pedido:', lineasPedido)
+      console.log('📦 Creando pedido para usuario:', userId);
 
       // 1. Crear el pedido en la base de datos
       const pedido = await orderService.createOrder({
         iduser: userId,
         fecha: new Date().toISOString().split('T')[0],
-        total: lineasPedido.reduce((acc: number, linea: LineaPedido) => acc + linea.cant * linea.precio, 0),
+        total: lineasPedido.reduce((acc: number, linea: LineaPedido) => 
+          acc + (linea.cant * linea.precio), 0
+        ),
         lineas: lineasPedido
       });
 
-      console.log('âœ… Pedido creado con ID:', pedido.id)
+      console.log('✅ Pedido creado con ID:', pedido.id);
 
-      // 2. Obtener los datos del usuario
-      const usuario = await orderService.getUserData(userId)
+      // 2. Obtener datos del usuario
+      const usuario = await orderService.getUserData(userId);
+      
       if (!usuario) {
-        console.warn('âš ï¸ No se encontró información del usuario')
+        console.warn('⚠️ No se encontró información del usuario');
+      } else {
+        console.log('👤 Usuario encontrado:', usuario.email);
       }
 
-      // 3. Generar el PDF del albarÃ¡n
-      const pdfBuffer = await pdfService.generarAlbaranBuffer(
-        pedido,
-        lineasPedido,
-        usuario
-      )
+      // 3. Generar el PDF del albarán
+      let pdfBuffer: Buffer | null = null;
+      try {
+        pdfBuffer = await pdfService.generarAlbaranBuffer(
+          pedido,
+          lineasPedido,
+          usuario
+        );
+        console.log('📄 PDF generado correctamente');
+      } catch (pdfError) {
+        console.error('❌ Error al generar PDF:', pdfError);
+      }
 
-      // 4. Enviar el albarÃ¡n por email
-      let emailEnviado = false
-      if (usuario && usuario.email) {
+      // 4. Enviar el albarán por email (NO FALLAR si falla el email)
+      let emailEnviado = false;
+      if (usuario && usuario.email && pdfBuffer) {
         try {
+          console.log('📧 Intentando enviar email a:', usuario.email);
+          
           emailEnviado = await emailService.enviarAlbaran(
             pedido,
             lineasPedido,
             usuario,
             pdfBuffer
-          )
-          console.log('âœ… AlbarÃ¡n enviado exitosamente por email')
+          );
+          
+          if (emailEnviado) {
+            console.log('✅ Email enviado exitosamente');
+          } else {
+            console.warn('⚠️ Email no pudo ser enviado, pero el pedido se creó correctamente');
+          }
         } catch (emailError) {
-          console.error('âŒ Error al enviar email:', emailError)
+          console.error('❌ Error al enviar email:', emailError);
+          // No fallamos el pedido si falla el email
         }
       } else {
-        console.warn(
-          'âš ï¸ No se pudo enviar email: usuario sin email configurado'
-        )
+        console.warn('⚠️ No se puede enviar email:', {
+          tieneUsuario: !!usuario,
+          tieneEmail: !!(usuario && usuario.email),
+          tienePDF: !!pdfBuffer
+        });
       }
 
+      // 5. Respuesta exitosa (aunque el email falle)
       return res.status(201).json({
         success: true,
         message: 'Pedido creado exitosamente',
-        data: { pedido, emailEnviado }
-      })
+        data: {
+          pedido,
+          emailEnviado,
+          emailStatus: emailEnviado 
+            ? 'Email enviado correctamente'
+            : 'Pedido creado pero el email no pudo ser enviado'
+        }
+      });
+
     } catch (error: any) {
-      console.error('âŒ Error al crear pedido:', error)
+      console.error('❌ Error al crear pedido:', error);
       return res.status(500).json({
         success: false,
         message: 'Error al crear el pedido',
         error: error.message
-      })
+      });
     }
   }
 
-  static async getUserOrders (req: Request, res: Response) {
+  // ... resto de métodos sin cambios
+  static async getUserOrders(req: Request, res: Response) {
     try {
-      const userId = req.params.userId || req.body.userId
+      const userId = req.params.userId || req.body.userId;
       if (!userId) {
         return res.status(400).json({
           success: false,
           message: 'Usuario no especificado'
-        })
+        });
       }
 
-      console.log('ðŸ“¦ Obteniendo pedidos del usuario:', userId)
       const pedidos = await orderService.getOrdersByUserWithLines(parseInt(userId));
-
 
       return res.status(200).json({
         success: true,
         data: pedidos
-      })
+      });
     } catch (error: any) {
-      console.error('âŒ Error al obtener pedidos:', error)
+      console.error('❌ Error al obtener pedidos:', error);
       return res.status(500).json({
         success: false,
         message: 'Error al obtener los pedidos',
         error: error.message
-      })
+      });
     }
   }
 
-  static async descargarAlbaran (req: Request, res: Response) {
+  static async descargarAlbaran(req: Request, res: Response) {
     try {
-      const pedidoId = parseInt(req.params.pedidoId)
-      const userId = req.body.userId || req.query.userId
+      const pedidoId = parseInt(req.params.pedidoId);
+      const userId = req.body.userId || req.query.userId;
+      
       if (!pedidoId) {
         return res.status(400).json({
           success: false,
           message: 'ID de pedido no especificado'
-        })
+        });
       }
 
-      console.log('ðŸ“¥ Descargando albarÃ¡n para pedido:', pedidoId)
-      // Obtener datos del pedido
       const pedido = await orderService.getOrderByIdWithLines(pedidoId);
       if (!pedido) {
         return res.status(404).json({
           success: false,
           message: 'Pedido no encontrado'
-        })
+        });
       }
 
-      // Verificar que el pedido pertenece al usuario (opcional)
       if (userId && pedido.iduser !== parseInt(userId as string)) {
         return res.status(403).json({
           success: false,
           message: 'No tienes permiso para acceder a este pedido'
-        })
+        });
       }
 
-      // Obtener lÃ­neas del pedido y datos de usuario
-      const lineas = await orderService.getOrderLines(pedidoId)
-      const usuario = await orderService.getUserData(pedido.iduser)
-      // Generar PDF
+      const lineas = await orderService.getOrderLines(pedidoId);
+      const usuario = await orderService.getUserData(pedido.iduser);
+      
       const pdfBuffer = await pdfService.generarAlbaranBuffer(
         pedido,
         lineas,
         usuario
-      )
+      );
 
-      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="Albaran_${pedidoId}.pdf"`
-      )
+      );
 
-      res.send(pdfBuffer)
+      res.send(pdfBuffer);
     } catch (error: any) {
-      console.error('âŒ Error al descargar albarÃ¡n:', error)
+      console.error('❌ Error al descargar albarán:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al generar el albarÃ¡n',
+        message: 'Error al generar el albarán',
         error: error.message
-      })
+      });
     }
   }
 
-  static async reenviarAlbaran (req: Request, res: Response) {
+  static async reenviarAlbaran(req: Request, res: Response) {
     try {
-      const pedidoId = parseInt(req.params.pedidoId)
+      const pedidoId = parseInt(req.params.pedidoId);
+      
       if (!pedidoId) {
         return res.status(400).json({
           success: false,
           message: 'ID de pedido no especificado'
-        })
+        });
       }
 
-      console.log('ðŸ“§ Reenviando albarÃ¡n para pedido:', pedidoId)
       const pedido = await orderService.getOrderByIdWithLines(pedidoId);
       if (!pedido) {
         return res.status(404).json({
           success: false,
           message: 'Pedido no encontrado'
-        })
+        });
       }
 
-      const lineas = await orderService.getOrderLines(pedidoId)
-      const usuario = await orderService.getUserData(pedido.iduser)
+      const lineas = await orderService.getOrderLines(pedidoId);
+      const usuario = await orderService.getUserData(pedido.iduser);
+      
       if (!usuario || !usuario.email) {
         return res.status(400).json({
           success: false,
           message: 'Usuario sin email configurado'
-        })
+        });
       }
 
-      // Generar PDF
       const pdfBuffer = await pdfService.generarAlbaranBuffer(
         pedido,
         lineas,
         usuario
-      )
+      );
 
-      // Enviar por email
-      await emailService.enviarAlbaran(pedido, lineas, usuario, pdfBuffer)
+      const emailEnviado = await emailService.enviarAlbaran(
+        pedido, 
+        lineas, 
+        usuario, 
+        pdfBuffer
+      );
 
       return res.status(200).json({
         success: true,
-        message: 'AlbarÃ¡n enviado exitosamente'
-      })
+        message: emailEnviado 
+          ? 'Albarán enviado exitosamente'
+          : 'No se pudo enviar el albarán'
+      });
     } catch (error: any) {
-      console.error('âŒ Error al reenviar albarÃ¡n:', error)
+      console.error('❌ Error al reenviar albarán:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al enviar el albarÃ¡n',
+        message: 'Error al enviar el albarán',
         error: error.message
-      })
+      });
     }
   }
 }
 
-export default OrderController
-
-
+export default OrderController;

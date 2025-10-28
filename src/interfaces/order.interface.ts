@@ -13,6 +13,7 @@ export interface IOrderLine {
   color: string;         // Color seleccionado
   cant: number;          // Cantidad
   nombre?: string;       // Nombre del producto (opcional, para mostrar)
+  precio: number;        // ✅ CRÍTICO: Precio unitario (ya no es opcional)
 }
 
 export interface ICartItem {

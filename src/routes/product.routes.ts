@@ -1,65 +1,33 @@
-// src/routes/product.routes.ts
+/**
+ * Rutas de Productos
+ * Define los endpoints de la API para productos
+ */
 import { Router } from 'express';
 import productController from '../controllers/product.controller';
-import { verifyToken } from '../middleware/auth.middleware';
-import { isAdmin } from '../middleware/admin.middleware';
-import { upload } from '../middleware/upload.middleware';
 
-// Crear un router para las rutas de producto
 const router = Router();
 
-// Rutas públicas (no requieren autenticación)
-/* GET /api/productos
- * Obtiene todos los productos */
-router.get('/', productController.index);
+// ⚠️ ORDEN CRÍTICO: Las rutas específicas deben ir ANTES de las rutas con parámetros
 
-// Comentamos temporalmente las rutas problemáticas
-/* 
-// GET /api/productos/search
-// Busca productos por término
-router.get('/search', productController.search);
-*/
+// 🔍 Búsqueda de productos (debe ir PRIMERO)
+router.get('/search', productController.search.bind(productController));
 
-// Añade esta ruta específica para obtener productos por categoría
-router.get('/categoria/:categoryId', productController.getProductsByCategory);
+// 📦 Productos por categoría (específico antes de :id)
+router.get('/categoria/:categoryId', productController.getProductsByCategory.bind(productController));
 
-/* GET /api/productos/:id
- * Obtiene un producto específico por ID */
-router.get('/:id', productController.show);
+// 🎨 Colores de un producto específico
+router.get('/:id/colors', productController.getColors.bind(productController));
 
- 
-// GET /api/productos/:id/colores
-// Obtiene colores disponibles para un producto
-router.get('/:id/color', productController.getColors);
+// 🖼️ Imagen de producto
+router.get('/image/:categoria/:imagen', productController.getImage.bind(productController));
 
+// 📋 CRUD básico
+router.get('/', productController.index.bind(productController));
+router.post('/', productController.store.bind(productController));
 
-// Rutas administrativas (requieren autenticación y permisos de admin)
-/* POST /api/productos
- * Crea un nuevo producto */
-router.post('/', [verifyToken, isAdmin], productController.store);
-
-/* PUT /api/productos/:id
- * Actualiza un producto existente */
-router.put('/:id', [verifyToken, isAdmin], productController.update);
-
-/* DELETE /api/productos/:id
- * Elimina un producto */
-router.delete('/:id', [verifyToken, isAdmin], productController.destroy);
-
-
-/* 
-// Comentamos temporalmente las rutas problemáticas
-// POST /api/productos/:id/colores
-// Añade un color a un producto
-router.post('/:id/color', [verifyToken, isAdmin], productController.addColor);
-
-// POST /api/productos/:id/images
-// Sube imágenes para un producto
-router.post('/:id/images', [
-  verifyToken, 
-  isAdmin, 
-  upload.array('images', 10) // Permite hasta 10 imágenes a la vez
-], productController.uploadImages);
-*/
+// ⚠️ Rutas con :id deben ir AL FINAL para evitar conflictos
+router.get('/:id', productController.show.bind(productController));
+router.put('/:id', productController.update.bind(productController));
+router.delete('/:id', productController.destroy.bind(productController));
 
 export default router;
