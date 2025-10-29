@@ -1,0 +1,13 @@
+node_modules/
+src/__tests__/
+dist/
+logs/
+uploads/
+.env*
+.env.development
+.env.test
+*.log
+.DS_Store
+.git/
+.vscode/
+coverage/
