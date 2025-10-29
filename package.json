@@ -4,9 +4,9 @@
   "description": "Backend para la tienda online Tatoodenda",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc --skipLibCheck",
+    "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn src/server.ts"
+    "dev": "ts-node-dev --respawn src/server.ts",
     "lint": "eslint . --ext .ts",
     "test": "jest"
   },
@@ -32,7 +32,8 @@
     "mysql2": "^3.2.0",
     "nodemailer": "^7.0.9",
     "sequelize": "^6.30.0",
-    "zod":"^3.23.2"
+    "winston": "^3.18.3",
+    "zod": "^3.23.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
