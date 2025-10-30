@@ -4,11 +4,11 @@
   "description": "Backend para la tienda online Tatoodenda",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn src/server.ts",
-    "lint": "eslint . --ext .ts",
-    "test": "jest"
+     "build": "npm install && npm run build",
+     "start": "npm start",
+      "dev": "ts-node-dev --respawn src/server.ts",
+      "lint": "eslint . --ext .ts",
+      "test": "jest"
   },
   "keywords": [
     "ecommerce",
@@ -53,4 +53,5 @@
     "typescript": "^5.0.3"
   }
 }
+
 
