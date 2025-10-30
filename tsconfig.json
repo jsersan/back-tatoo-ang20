@@ -17,5 +17,9 @@
     "skipDefaultLibCheck": true // Omite la comprobación de bibliotecas predeterminadas
   },
   "include": ["src/**/*"], // Archivos a incluir en la compilación
-  "exclude": ["node_modules", "dist"] // Archivos a excluir de la compilación
-}
+  "exclude": ["node_modules",
+              "dist",
+              "**/__tests__/**",
+              "**/*.test.ts",
+              "**/*.spec.ts"          
+              ] // Archivos a excluir de la compilación
