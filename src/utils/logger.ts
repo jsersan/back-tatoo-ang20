@@ -51,7 +51,7 @@ const getTransports = () => {
       new winston.transports.Console({
         level: 'debug',
         format: consoleFormat
-      })
+      }) as any
     );
   } else {
     // En producción, guardar todos los logs en archivo
