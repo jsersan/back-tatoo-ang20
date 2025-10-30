@@ -1,25 +1,27 @@
 {
   "compilerOptions": {
-    "target": "es2017", // Versión de JavaScript a la que compilar
-    "module": "commonjs", // Sistema de módulos a utilizar
-    "outDir": "./dist", // Directorio de salida para archivos compilados
-    "rootDir": "./src", // Directorio raíz de los archivos fuente
-    "strict": true, // Habilita todas las comprobaciones estrictas de tipo
-    "esModuleInterop": true, // Habilita la interoperabilidad con módulos ES
-    "resolveJsonModule": true, // Permite importar archivos JSON
-    "experimentalDecorators": true, // Habilita decoradores experimentales
-    "emitDecoratorMetadata": true, // Emite metadatos para decoradores
-    "sourceMap": true, // Genera archivos de mapas de origen para depuración
-    "declaration": true, // Genera archivos de declaración .d.ts
-    "moduleResolution": "node", // Estrategia de resolución de módulos
-    "forceConsistentCasingInFileNames": true, // Fuerza consistencia en mayúsculas/minúsculas
-    "skipLibCheck": true, // Omite la comprobación de archivos .d.ts
-    "skipDefaultLibCheck": true // Omite la comprobación de bibliotecas predeterminadas
+    "target": "es2017",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "sourceMap": true,
+    "declaration": true,
+    "moduleResolution": "node",
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true
   },
-  "include": ["src/**/*"], // Archivos a incluir en la compilación
-  "exclude": ["node_modules",
-              "dist",
-              "**/__tests__/**",
-              "**/*.test.ts",
-              "**/*.spec.ts"          
-              ] // Archivos a excluir de la compilación
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}
