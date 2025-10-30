@@ -7,12 +7,23 @@ import path from 'path';
 import fs from 'fs';
 
 // Directorio para almacenar los archivos de logs
-const logDir = path.join(__dirname, '../../logs');
+// const logDir = path.join(__dirname, '../../logs');
 
-// Crear el directorio de logs si no existe
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
+// // Crear el directorio de logs si no existe
+// if (!fs.existsSync(logDir)) {
+//   fs.mkdirSync(logDir, { recursive: true });
+// }
+
+const logDir = process.env.NODE_ENV === 'production' 
+  ? '/tmp/logs'  // En Render usa /tmp
+  : path.join(__dirname, '../../logs');
+
+// Crear directorio solo cuando el logger se use, no al importar
+const ensureLogDir = () => {
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+};
 
 // Formato personalizado para los logs
 const logFormat = winston.format.combine(
@@ -36,6 +47,7 @@ const consoleFormat = winston.format.combine(
 
 // Configuración de transportes para diferentes entornos
 const getTransports = () => {
+  ensureLogDir();
   const transports = [
     // Siempre guardar logs de errores en archivo
     new winston.transports.File({
@@ -157,4 +169,3 @@ export default {
     return logger.info(message, { user, ...meta });
   }
 };
-
