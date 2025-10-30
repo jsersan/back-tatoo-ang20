@@ -59,7 +59,7 @@ const getTransports = () => {
       new winston.transports.File({
         filename: path.join(logDir, 'combined.log'),
         format: logFormat
-      })
+      }) as any
     );
   }
 
@@ -157,3 +157,4 @@ export default {
     return logger.info(message, { user, ...meta });
   }
 };
+
