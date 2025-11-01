@@ -1,27 +1,24 @@
 /**
  * Sistema de logging estructurado para la aplicación
- * Utiliza Winston para generación de logs con diferentes niveles
+ * Optimizado para funcionar en Render (producción) y local (desarrollo)
  */
 import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
 
-// Directorio para almacenar los archivos de logs
-// const logDir = path.join(__dirname, '../../logs');
-
-// // Crear el directorio de logs si no existe
-// if (!fs.existsSync(logDir)) {
-//   fs.mkdirSync(logDir, { recursive: true });
-// }
-
+// Directorio para logs - en producción usar /tmp (Render), en desarrollo usar ./logs
 const logDir = process.env.NODE_ENV === 'production' 
-  ? '/tmp/logs'  // En Render usa /tmp
+  ? '/tmp/logs'  
   : path.join(__dirname, '../../logs');
 
-// Crear directorio solo cuando el logger se use, no al importar
+// Función para crear el directorio de logs de forma segura
 const ensureLogDir = () => {
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
+  try {
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+  } catch (error) {
+    console.warn('No se pudo crear directorio de logs, usando solo consola:', error);
   }
 };
 
@@ -47,15 +44,7 @@ const consoleFormat = winston.format.combine(
 
 // Configuración de transportes para diferentes entornos
 const getTransports = () => {
-  ensureLogDir();
-  const transports = [
-    // Siempre guardar logs de errores en archivo
-    new winston.transports.File({
-      filename: path.join(logDir, 'error.log'),
-      level: 'error',
-      format: logFormat
-    }),
-  ];
+  const transports: winston.transport[] = [];
 
   // En desarrollo, mostrar logs en consola con colores
   if (process.env.NODE_ENV !== 'production') {
@@ -63,16 +52,50 @@ const getTransports = () => {
       new winston.transports.Console({
         level: 'debug',
         format: consoleFormat
-      }) as any
+      })
     );
+    
+    // En desarrollo también guardar en archivo
+    try {
+      ensureLogDir();
+      transports.push(
+        new winston.transports.File({
+          filename: path.join(logDir, 'error.log'),
+          level: 'error',
+          format: logFormat
+        })
+      );
+    } catch (error) {
+      console.warn('No se pueden crear archivos de log en desarrollo');
+    }
   } else {
-    // En producción, guardar todos los logs en archivo
+    // En producción, usar principalmente consola (Render captura esto)
     transports.push(
-      new winston.transports.File({
-        filename: path.join(logDir, 'combined.log'),
-        format: logFormat
-      }) as any
+      new winston.transports.Console({
+        level: 'info',
+        format: winston.format.combine(
+          winston.format.timestamp(),
+          winston.format.json()
+        )
+      })
     );
+    
+    // Intentar crear archivo de logs en /tmp si es posible
+    try {
+      ensureLogDir();
+      transports.push(
+        new winston.transports.File({
+          filename: path.join(logDir, 'error.log'),
+          level: 'error',
+          format: logFormat,
+          maxsize: 5242880, // 5MB
+          maxFiles: 2
+        })
+      );
+    } catch (error) {
+      // Si no se puede escribir en disco, solo usar consola
+      console.warn('Logs solo en consola (no se puede escribir en disco)');
+    }
   }
 
   return transports;
@@ -84,7 +107,6 @@ const logger = winston.createLogger({
   levels: winston.config.npm.levels,
   format: logFormat,
   transports: getTransports(),
-  // No salir ante errores no manejados
   exitOnError: false
 });
 
@@ -101,14 +123,11 @@ const formatError = (error: any): object => {
 
 // Middleware para logging de solicitudes HTTP
 export const requestLogger = (req: any, res: any, next: any): void => {
-  // Registrar la solicitud entrante
   const start = Date.now();
   
-  // Registrar al final de la solicitud
   res.on('finish', () => {
     const duration = Date.now() - start;
     
-    // Log a nivel de información para solicitudes normales
     if (res.statusCode < 400) {
       logger.info('HTTP Request', {
         method: req.method,
@@ -117,9 +136,7 @@ export const requestLogger = (req: any, res: any, next: any): void => {
         duration: `${duration}ms`,
         ip: req.ip
       });
-    } 
-    // Log a nivel de advertencia para errores de cliente
-    else if (res.statusCode < 500) {
+    } else if (res.statusCode < 500) {
       logger.warn('HTTP Request (Client Error)', {
         method: req.method,
         url: req.originalUrl,
@@ -127,9 +144,7 @@ export const requestLogger = (req: any, res: any, next: any): void => {
         duration: `${duration}ms`,
         ip: req.ip
       });
-    } 
-    // Log a nivel de error para errores de servidor
-    else {
+    } else {
       logger.error('HTTP Request (Server Error)', {
         method: req.method,
         url: req.originalUrl,
@@ -145,7 +160,6 @@ export const requestLogger = (req: any, res: any, next: any): void => {
 
 // Exportar el logger personalizado con métodos convenientes
 export default {
-  // Niveles de log estándar
   error: (message: string, meta?: any) => {
     return logger.error(message, meta);
   },
@@ -158,13 +172,9 @@ export default {
   debug: (message: string, meta?: any) => {
     return logger.debug(message, meta);
   },
-  
-  // Método específico para errores
   logError: (message: string, error: any) => {
     return logger.error(message, formatError(error));
   },
-  
-  // Método para logs de acceso/autenticación
   auth: (message: string, user: string | number, meta?: any) => {
     return logger.info(message, { user, ...meta });
   }
